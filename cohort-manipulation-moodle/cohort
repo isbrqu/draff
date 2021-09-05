@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+
+# urls
+declare -r ORIGIN="https://lazos.neuquen.edu.ar"
+declare -r URL_ASSIGN="$ORIGIN/cohort/assign.php"
+declare -r URL_SEARCH="$ORIGIN/user/selector/search.php"
+
+# session data
+declare sesskey="FLRFhAT36E"
+declare moodlesession="020ecf074308ac61089742d79c5358b3"
+declare moodleid1="%25CB%25F0%25CA%25F6%25A5%2584%25E59"
+declare cookie="MoodleSession=$moodlesession; MOODLEID1_=$moodleid1" 
+
+declare -A cohorts=(
+    [1a]="1219 df9074ae69482c1f5f09af68e085d524 d7cb0fe2ce7cae2496d178578cdd4bed"
+    [1b]="1220 bdfb54116aedcf97c29b181515285f3c 9dbdb02c5f63d9db3cd612176c7cabfa"
+    [1c]="1221 6cb8c318f8096bd82bee9ae6c204a0d0 d4a5c54b0b97dbe4ed37948021058961"
+    [1d]="1222 07fb03c18517e54f3f0e4e9d70f9bf2a f16ef9fde43e6695938dfe0472269252"
+    [2a]="1218 9063a631a020a239852ce140d3d4ee4a 21c11c0c0505a78659f1822c8269f86f"
+    [2b]="1224 a58029eeeb6fa6afab61974b5de62968 70d83f2ba4a059a70e40826479677711"
+    [2c]="1225 07de1a2eca51ab09cd45ea321c6c047f 7400bde436e4d9da30e666af262812fd"
+    [3a]="1226 53f20a7a53eeb7370f085831d6bc211e 0b4ce6f38a765448864e686a8b7e55c9"
+    [3b]="1227 f461e19b6557cba410f8d99829c80c0f 95e6f6bca11a0762fd5afc24fd77e006"
+)
+
+declare -A actcod=(
+    [add]="%e2%97%84%c2%a0agregar"
+    [del]="Quitar%C2%A0%E2%96%BA"
+)
+
+curl_refer_assign() {
+    local url="$1"
+    local header="$2"
+    local data="$3"
+    curl "$url"\
+        -H @header/"$header"\
+        -H "Referer: $URL_ASSIGN?id=$assign_id"\
+        -H "Cookie: $cookie"\
+        --data "sesskey=$sesskey&$data"\
+        --compressed 2> out 
+}
+
+search() {
+    local selectorid="$1"
+    local search="$2"
+    local data="selectorid=$selectorid&search=$search"
+    local json
+    json="$(curl_refer_assign "$URL_SEARCH" "search" "$data")"
+    echo "$json"
+}
+
+add() {
+    local assign_id="$1"
+    local user_id="$2"
+    local URL="$URL_ASSIGN?id=$assign_id"
+    local data="addselect%5b%5d=$user_id&add=x"
+    curl_refer_assign "$URL" "add" "$data" > /dev/null
+}
+
+del() {
+    local assign_id="$1"
+    local user_id="$2"
+    local URL="$URL_ASSIGN?id=$assign_id"
+    local data="removeselect%5B%5D=$user_id&remove=x"
+    curl_refer_assign "$URL" "del" "$data" > /dev/null
+}
+
+to_row() {
+    local json="$1"
+    echo "$json" | jq --raw-output --from-file script/jq/row.jq | column -t -s '()'
+}
+
+to_csv() {
+    local json="$1"
+    echo "$json" | jq --raw-output --from-file script/jq/csv.jq
+}
+
+select_user() {
+    local json="$1"
+    local user
+    user="$(to_row "$json" | fzf --exit-0 --select-1)"
+    echo "$user"
+}
+
+error() {
+    local msg="$1"
+    echo "$msg" >&2
+    exit 1
+}
+
+get_error_json() {
+    local json="$1"
+    local error
+    error="$(echo "$json" | jq --raw-output --from-file script/jq/error.jq)"
+    echo "$error"
+}
+
+get_users() {
+    local scope="$1"
+    local query="$2"
+    local response
+    response="$(search "$scope" "$query")"
+    error="$(get_error_json "$response")"
+    [[ -n "$error" ]] && error "$error"
+    users="$(to_csv "$response")"
+    [[ -z "$users" ]] && error "users not found"
+    echo "$users"
+}
+
+get_user() {
+    local scope="$1"
+    local query="$2"
+    local response
+    response="$(search "$scope" "$query")"
+    error="$(get_error_json "$response")"
+    [[ -n "$error" ]] && error "$error"
+    user="$(select_user "$response")"
+    [[ -z "$user" ]] && error "user not found"
+    echo "$user"
+}
+
+# parameters
+declare action="$1"
+declare course="${2:-x}"
+declare query="$3"
+
+# does the course exist?
+[[ "${!cohorts[@]}" != *"$course"* ]] && error "no course"
+
+declare users
+declare user
+declare id
+declare msg_error
+declare cohort="${cohorts[$2]}"
+declare assign_id="${cohort%% *}"
+declare selectors="${cohort#* }"
+declare qself="${selectors% *}"
+declare qall="${selectors#* }"
+declare add="$qself"
+declare del="$qall"
+
+case "$action" in
+    self)
+        get_users "$qself" "$query"
+    ;;
+    add-by-id)
+        user_id="$query"
+        add "$assign_id" "$user_id"
+    ;;
+    del-by-id)
+        user_id="$query"
+        del "$assign_id" "$user_id"
+    ;;
+    qall)
+        user="$(get_user "$qall" "$query")" || exit 1
+        echo "$user"
+    ;;
+    qself)
+        user="$(get_user "$qself" "$query")" || exit 1
+        echo "$user"
+    ;;
+    add)
+        user="$(get_user "$qall" "$query")" || exit 1
+        echo "$user"
+        user_id="${user##* }"
+        add "$assign_id" "$user_id"
+    ;;
+    del)
+        user="$(get_user "$qself" "$query")" || exit 1
+        echo "$user"
+        user_id="${user##* }"
+        del "$assign_id" "$user_id"
+    ;;
+    *)
+        echo "usage: cohort [add|del|qall|qself] course query"
+        exit 1
+    ;;
+esac
