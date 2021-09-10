@@ -13,7 +13,7 @@ get_datetime() {
     local file="$1"
     local value
     local -r REGEX="Fecha y Hora:\s+\K.+"
-    value="$(get_value "$file" "$regex")"
+    value="$(get_value "$file" "$REGEX")"
     value="${value//\//-}"
     value="${value//:/-}"
     value="${value// /-}"
@@ -24,7 +24,7 @@ get_number() {
     local file="$1"
     local value
     local -r REGEX="Número de Transacción:\s+\K.+"
-    value="$(get_value "$file" "$regex")"
+    value="$(get_value "$file" "$REGEX")"
     value="${value//:/-}"
     value="${value// /-}"
     echo "$value"
@@ -37,8 +37,8 @@ main() {
     local number
     local new
     local bytes
-    local -a files=($(\
-        find "$folder" -type f -name "*.pdf" -size +3000c -a -size -7000c\
+    local -a files=($(
+        find "$folder" -type f -name "*.pdf" -size +3000c -a -size -7000c
     ))
     for old in "${files[@]}";do
         txt="$(mktemp --suffix=.txt)"

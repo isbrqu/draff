@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-shopt -s extglob
 
 declare file
 declare folder_input="input"
