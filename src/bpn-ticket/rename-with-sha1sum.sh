@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
 
+declare -r SCRIPT_NAME
+SCRIPT_NAME="$(basename "$0")"
+
+usage() {
+    echo "$SCRIPT_NAME <ext> <input> <output>"
+}
 
 main() {
     local ext="$1"
     local input="$2"
     local output="$3"
-    if [[ -z "$ext" ]];then
-        echo "ext is empty"
+    local new
+    if [[ -z "$ext" || -z "$input" || -z "$output"]];then
+        usage
         return 1
     fi
-    if [[ -z "$input" ]];then
-        echo "input is empty"
-        return 1
-    fi
-    if [[ -z "$output" ]];then
-        echo "output is empty"
-        return 1
-    fi
-    find "$input" -name "*.$ext" -print0 | while IFS= read -r -d '' name;do
-        hash="$(sha1sum "$name")"
+    find "$input" -name "*.$ext" -print0 | while IFS= read -r -d '' old;do
+        hash="$(sha1sum "$old")"
         hash="${hash// */}"
-        echo "$hash"
         mkdir --parents "$output"
-        mv --no-clobber "$name" "$output/$hash.$ext"
+        new="$output/$hash.$ext"
+        echo "$old -> $new"
+        mv --no-clobber "$old" "$new"
     done
 }
 
