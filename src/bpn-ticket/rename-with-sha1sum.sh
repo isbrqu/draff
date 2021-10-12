@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-declare -r SCRIPT_NAME
+declare SCRIPT_NAME
 SCRIPT_NAME="$(basename "$0")"
 
 usage() {
@@ -12,7 +12,7 @@ main() {
     local input="$2"
     local output="$3"
     local new
-    if [[ -z "$ext" || -z "$input" || -z "$output"]];then
+    if [[ -z "$ext" || -z "$input" || -z "$output" ]];then
         usage
         return 1
     fi
